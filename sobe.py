@@ -5,6 +5,7 @@ from io import StringIO
 
 TOKEN = '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'
 
+
 # URL da API do GitHub contendo os arquivos CSV
 api_url = 'https://api.github.com/repos/digodrx/fut/contents/MELHOR%20PRAZO'
 raw_base_url = 'https://raw.githubusercontent.com/digodrx/fut/main/MELHOR%20PRAZO/'
@@ -13,7 +14,8 @@ raw_base_url = 'https://raw.githubusercontent.com/digodrx/fut/main/MELHOR%20PRAZ
 headers = {'Authorization': f'token {TOKEN}'}
 response = requests.get(api_url, headers=headers)
 if response.status_code != 200:
-    st.error("Erro ao acessar o repositório no GitHub.")
+    st.error("Erro ao acessar o repositório no GitHub. Código de status: " + str(response.status_code))
+    st.write(response.text)
     st.stop()
 
 arquivos = [
