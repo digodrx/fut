@@ -1,34 +1,62 @@
-import os
 import pandas as pd
 import streamlit as st
+import requests
+from io import StringIO
 
-# Define o caminho da pasta contendo os arquivos CSV
-caminho_pasta = r'C:\Users\Rodrigo Traldi\PROJETO INVESTIMENTO\MELHOR PRAZO'
+TOKEN = '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'
+
+# URL da API do GitHub contendo os arquivos CSV
+api_url = 'https://api.github.com/repos/digodrx/fut/contents/MELHOR%20PRAZO'
+raw_base_url = 'https://raw.githubusercontent.com/digodrx/fut/main/MELHOR%20PRAZO/'
+
+# Obter a lista de arquivos CSV no repositório
+headers = {'Authorization': f'token {TOKEN}'}
+response = requests.get(api_url, headers=headers)
+if response.status_code != 200:
+    st.error("Erro ao acessar o repositório no GitHub.")
+    st.stop()
+
+arquivos = [
+    arquivo['name'] for arquivo in response.json()
+    if arquivo['name'].endswith('.csv')
+]
+
+# Verificar se há arquivos CSV encontrados
+if not arquivos:
+    st.error("Nenhum arquivo CSV encontrado no repositório.")
+    st.stop()
 
 # Lista para armazenar todos os DataFrames
 lista_dataframes = []
 
-# Itera sobre todos os arquivos na pasta
-for arquivo in os.listdir(caminho_pasta):
-    if arquivo.endswith('.csv'):
-        caminho_arquivo = os.path.join(caminho_pasta, arquivo)
-        df = pd.read_csv(caminho_arquivo, encoding='latin1', sep=';', index_col=False)
-        # Converter colunas numéricas que contêm vírgulas para o formato numérico adequado
-        colunas_para_converter = [
-            'Peso Inicial Kg', 'Peso Final Kg', 'Valor Inicial R$', 'Valor Final R$', 'Cubagem', 
-            'Limite Peso Kg', 'Prazo Entrega', 'Frete Valor R$', 'Excedente R$', 'AdValor %', 
-            'Peso Excedente Kg', 'Valor Por Kg R$', 'Despacho R$', 'Total Minimo R$', 'Imposto %',
-            'Seguro %', 'Seguro Minimo R$', 'Gris %', 'Gris Minimo R$', 'Pedagio R$', 
-            'Pedagio Fração R$', 'Tas %', 'Tas Minimo R$', 'Emex %', 'Emex Minimo R$', 
-            'Taxa Minima R$', 'Taxa Maxima R$', 'Taxa %'
-        ]
-        for coluna in colunas_para_converter:
-            if coluna in df.columns and df[coluna].dtype == 'object':
-                df[coluna] = pd.to_numeric(df[coluna].str.replace('.', '').str.replace(',', '.'), errors='coerce')
-        # Garantir que a coluna Transportadora está sendo lida corretamente
-        if 'Transportadora' not in df.columns:
-            df.rename(columns={'transportadora': 'Transportadora'}, inplace=True)
-        lista_dataframes.append(df)
+# Itera sobre todos os arquivos na lista de URLs
+for arquivo in arquivos:
+    url = raw_base_url + arquivo
+    response = requests.get(url)
+    if response.status_code == 200:
+        df = pd.read_csv(StringIO(response.text), encoding='latin1', sep=';', index_col=False)
+        if not df.empty:
+            # Converter colunas numéricas que contêm vírgulas para o formato numérico adequado
+            colunas_para_converter = [
+                'Peso Inicial Kg', 'Peso Final Kg', 'Valor Inicial R$', 'Valor Final R$', 'Cubagem', 
+                'Limite Peso Kg', 'Prazo Entrega', 'Frete Valor R$', 'Excedente R$', 'AdValor %', 
+                'Peso Excedente Kg', 'Valor Por Kg R$', 'Despacho R$', 'Total Minimo R$', 'Imposto %',
+                'Seguro %', 'Seguro Minimo R$', 'Gris %', 'Gris Minimo R$', 'Pedagio R$', 
+                'Pedagio Fração R$', 'Tas %', 'Tas Minimo R$', 'Emex %', 'Emex Minimo R$', 
+                'Taxa Minima R$', 'Taxa Maxima R$', 'Taxa %'
+            ]
+            for coluna in colunas_para_converter:
+                if coluna in df.columns and df[coluna].dtype == 'object':
+                    df[coluna] = pd.to_numeric(df[coluna].str.replace('.', '').str.replace(',', '.'), errors='coerce')
+            # Garantir que a coluna Transportadora está sendo lida corretamente
+            if 'Transportadora' not in df.columns:
+                df.rename(columns={'transportadora': 'Transportadora'}, inplace=True)
+            lista_dataframes.append(df)
+
+# Verificar se há DataFrames para concatenar
+if not lista_dataframes:
+    st.error("Nenhum DataFrame válido encontrado nos arquivos CSV.")
+    st.stop()
 
 # Concatena todos os DataFrames em um único DataFrame
 # Ignorar índices para evitar conflitos e preservar os valores corretos
@@ -81,22 +109,20 @@ for index, row in df_completo.iterrows():
 # Converte a lista de melhores prazos para um DataFrame
 df_melhores_prazos = pd.DataFrame(melhores_prazos)
 
-# Salva o DataFrame resultante em um arquivo CSV
-df_melhores_prazos.to_csv(r'C:\Users\Rodrigo Traldi\PROJETO INVESTIMENTO\melhor_prazo_por_cep_peso.csv', index=False)
-
-print("Análise concluída e arquivo salvo.")
-
 # Streamlit para consulta de melhores prazos
 st.title('Consulta de Melhor Prazo de Entrega por CEP e Peso')
 
 # Entrada de CEP
-cep_input = st.text_input('Digite o CEP para consultar o melhor prazo de entrega:')
+cep_input = st.text_input('Digite o CEP para consultar o melhor prazo de entrega (formato xxxxx-xx):')
 
 # Entrada de Peso
 peso_input = st.number_input('Digite o peso (em Kg):', min_value=0.0, step=0.1)
 
 # Buscar e exibir o melhor prazo para o CEP e peso informados
 if cep_input and peso_input > 0:
+    cep_input = cep_input.strip().replace('-', '')
+    df_melhores_prazos['Cep Inicial'] = df_melhores_prazos['Cep Inicial'].str.replace('-', '')
+    df_melhores_prazos['Cep Final'] = df_melhores_prazos['Cep Final'].str.replace('-', '')
     resultados = df_melhores_prazos[(df_melhores_prazos['Cep Inicial'] <= cep_input) &
                                      (df_melhores_prazos['Cep Final'] >= cep_input) &
                                      (df_melhores_prazos['Peso Inicial Kg'] <= peso_input) &
